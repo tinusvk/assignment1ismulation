@@ -1,0 +1,364 @@
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import scipy.stats as stats
+
+#Load data
+FILE = "/Users/tijnvankruijsbergen/Documents/Econometrie/Bachelor 2/Blok 3/Simulatie/Assingment1/ass_part_1_dataset.xlsx"
+SHEET = "Data"
+
+df = pd.read_excel(FILE, sheet_name = SHEET)
+df = df.sort_values(["Day", "Time of day in seconds", "Total time in seconds"]).reset_index(drop=True)
+
+
+# Clean column names (your file has trailing spaces in some column names)
+df.columns = [c.strip() for c in df.columns]
+
+# Optional: map visitor type to labels (assumption: 1/2 coding)
+# If your course uses a different coding, just edit this mapping.
+type_map = {1: "Employee", 2: "Student"}
+df["Visitor type label"] = df["Visitor type"].map(type_map).fillna(df["Visitor type"].astype(str))
+
+# Sort by arrival time (important for interarrival calculations)
+df = df.sort_values(["Day", "Time of day in seconds", "Total time in seconds"]).reset_index(drop=True)
+
+# -----------------------
+# 1) Contextual information
+# -----------------------
+print("\n=== Contextual info ===")
+print(f"Rows (visitors): {len(df)}")
+print(f"Days in dataset (unique): {df['Day'].nunique()} -> {sorted(df['Day'].unique())[:10]}{'...' if df['Day'].nunique()>10 else ''}")
+print("Visitor type counts:")
+print(df["Visitor type label"].value_counts(dropna=False))
+print("\nDesk opening hours per assignment: weekdays 09:00–17:00 (visitors arriving before 17:00 still served).")
+
+# Opening times in seconds since midnight
+OPEN_SEC = 9 * 3600
+CLOSE_SEC = 17 * 3600
+
+# Quick check: are arrivals mostly within open hours?
+within_open = df["Time of day in seconds"].between(OPEN_SEC, CLOSE_SEC)
+print(f"\nArrivals within 09:00–17:00: {within_open.mean()*100:.1f}%")
+
+# -----------------------
+# 2) Plot of arrivals over time (overall)
+# -----------------------
+# Count arrivals per day
+arrivals_per_day = df.groupby("Day")["Visitor Number"].count().sort_index()
+
+# Cumulative sum over days
+cumulative_arrivals = arrivals_per_day.cumsum()
+
+days = cumulative_arrivals.index.values
+cum_counts = cumulative_arrivals.values
+
+plt.figure()
+plt.plot(days, cum_counts, marker="o")
+
+# Axis formatting
+plt.xlabel("Day")
+plt.ylabel("Cumulative number of arrivals")
+plt.title("Cumulative arrivals over time (all visitors)")
+plt.xticks(days)  # only integer days
+
+plt.tight_layout()
+plt.show()
+
+# -----------------------
+# Arrivals per day 
+# -----------------------
+
+days = arrivals_per_day.index.values
+counts = arrivals_per_day.values
+
+y_max = counts.max()
+y_min = counts.min()
+
+plt.figure()
+plt.plot(days, counts, marker="o")
+
+# Horizontal lines for min and max
+plt.axhline(y=y_max, linestyle="--", linewidth=1, label=f"Maximum = {y_max}")
+plt.axhline(y=y_min, linestyle="--", linewidth=1, label=f"Minimum = {y_min}")
+
+# Axis formatting
+plt.xlabel("Day")
+plt.ylabel("Number of arrivals")
+plt.title("Arrivals per day")
+plt.xticks(days)   # force integer day ticks only
+
+plt.legend()
+plt.tight_layout()
+plt.show()
+
+
+# -----------------------
+# Cumulative arrivals over time by visitor type (by day)
+# -----------------------
+plt.figure()
+
+for visitor_type, g in df.groupby("Visitor type label"):
+    # Count arrivals per day for this visitor type
+    arrivals_per_day_type = (
+        g.groupby("Day")["Visitor Number"]
+        .count()
+        .sort_index()
+    )
+    
+    # Cumulative sum over days
+    cumulative_arrivals_type = arrivals_per_day_type.cumsum()
+    
+    days = cumulative_arrivals_type.index.values
+    cum_counts = cumulative_arrivals_type.values
+    
+    plt.plot(days, cum_counts, marker="o", label=str(visitor_type))
+
+# Axis formatting
+all_days = sorted(df["Day"].unique())
+plt.xticks(all_days)
+
+plt.xlabel("Day")
+plt.ylabel("Cumulative number of arrivals")
+plt.title("Cumulative arrivals over time by visitor type")
+plt.legend()
+plt.tight_layout()
+plt.show()
+
+# -----------------------
+# 3) Descriptive statistics
+# -----------------------
+print("\n=== Descriptive statistics (overall) ===")
+print(df[["Waiting time", "Service time"]].describe())
+
+print("\n=== Descriptive statistics (by visitor type) ===")
+print(df.groupby("Visitor type label")[["Waiting time", "Service time"]].describe())
+
+# Also useful: percent waiting at all
+print("\n=== Waiting incidence ===")
+print("Share with zero waiting time:", (df["Waiting time"] == 0).mean())
+
+# -----------------------
+# 4) Histograms
+# -----------------------
+
+# -----------------------
+# Histogram of arrivals by time of day (clock time)
+# -----------------------
+
+# Convert seconds since midnight to hours
+time_in_hours = df["Time of day in seconds"] / 3600
+
+plt.figure()
+plt.hist(time_in_hours, bins=30)
+
+# Format x-axis as clock time
+hour_ticks = range(9, 18)  # 09:00 to 17:00
+plt.xticks(hour_ticks, [f"{h:02d}:00" for h in hour_ticks])
+
+plt.xlabel("Time of day")
+plt.ylabel("Frequency")
+plt.title("Histogram of arrival times during the day")
+
+plt.tight_layout()
+plt.show()
+
+# 4b) Interarrival times (overall) - within each day
+# (reset at day boundaries, so you don’t mix overnight gaps)
+df["Interarrival"] = np.nan
+for day, g in df.groupby("Day", sort=True):
+    idx = g.index
+    times = g["Time of day in seconds"].values
+    inter = np.diff(times, prepend=np.nan)
+    df.loc[idx, "Interarrival"] = inter
+
+interarrival = df["Interarrival"].dropna()
+interarrival = interarrival[interarrival >= 0]  # safety
+
+plt.figure()
+plt.hist(interarrival, bins=40)
+plt.xlabel("Interarrival time (seconds) within day")
+plt.ylabel("Frequency")
+plt.title("Histogram: interarrival times (within-day)")
+plt.tight_layout()
+plt.show()
+
+# Interarrival by type (optional)
+plt.figure()
+for t, g in df.groupby("Visitor type label"):
+    g2 = g.copy()
+    g2["Interarrival"] = np.nan
+    for day, gg in g2.groupby("Day", sort=True):
+        idx = gg.index
+        times = gg["Time of day in seconds"].values
+        inter = np.diff(times, prepend=np.nan)
+        g2.loc[idx, "Interarrival"] = inter
+    ia = g2["Interarrival"].dropna()
+    ia = ia[ia >= 0]
+    plt.hist(ia, bins=40, alpha=0.5, label=str(t))
+plt.xlabel("Interarrival time (seconds) within day")
+plt.ylabel("Frequency")
+plt.title("Histogram: interarrival times by visitor type")
+plt.legend()
+plt.tight_layout()
+plt.show()
+
+# 4c) Waiting time histogram
+plt.figure()
+plt.hist(df["Waiting time"], bins=40)
+plt.xlabel("Waiting time (seconds)")
+plt.ylabel("Frequency")
+plt.title("Histogram: waiting times")
+plt.tight_layout()
+plt.show()
+
+# 4d) Service time histogram
+plt.figure()
+plt.hist(df["Service time"], bins=40)
+plt.xlabel("Service time (seconds)")
+plt.ylabel("Frequency")
+plt.title("Histogram: service times")
+plt.tight_layout()
+plt.show()
+
+# Service time by type
+plt.figure()
+for t, g in df.groupby("Visitor type label"):
+    plt.hist(g["Service time"], bins=40, alpha=0.5, label=str(t))
+plt.xlabel("Service time (seconds)")
+plt.ylabel("Frequency")
+plt.title("Histogram: service times by visitor type")
+plt.legend()
+plt.tight_layout()
+plt.show()
+
+print("\nDone. You now have: plots over time, descriptive statistics, histograms, plus contextual info in console.")
+
+#---------------------------
+#QQ Plots
+#---------------------------
+df["Interarrival"] = np.nan
+
+for day, g in df.groupby("Day", sort=True):
+    idx = g.index
+    times = g["Time of day in seconds"].values
+    inter = np.diff(times, prepend=np.nan)
+    df.loc[idx, "Interarrival"] = inter
+
+# Remove invalid values
+interarrival = df["Interarrival"].dropna()
+interarrival = interarrival[interarrival > 0]
+
+
+lambda_hat = 1 / interarrival.mean()
+
+print(f"Estimated arrival rate lambda = {lambda_hat:.6f} per second")
+
+
+# -----------------------
+# Q-Q plot: interarrival times vs exponential
+# -----------------------
+
+plt.figure()
+
+stats.probplot(
+    interarrival,
+    dist=stats.expon,
+    sparams=(0, 1/lambda_hat),
+    plot=plt
+)
+
+plt.title("Q-Q plot: interarrival times vs exponential distribution")
+plt.tight_layout()
+plt.show()
+
+
+# -----------------------
+# Q-Q plots by visitor type
+# -----------------------
+
+for visitor_type, g in df.groupby("Visitor type label"):
+    g = g.copy()
+    g["Interarrival"] = np.nan
+    
+    for day, gg in g.groupby("Day", sort=True):
+        idx = gg.index
+        times = gg["Time of day in seconds"].values
+        inter = np.diff(times, prepend=np.nan)
+        g.loc[idx, "Interarrival"] = inter
+    
+    ia = g["Interarrival"].dropna()
+    ia = ia[ia > 0]
+    
+    lambda_hat_type = 1 / ia.mean()
+    
+    plt.figure()
+    stats.probplot(
+        ia,
+        dist=stats.expon,
+        sparams=(0, 1/lambda_hat_type),
+        plot=plt
+    )
+    
+    plt.title(f"Q-Q plot: interarrival times ({visitor_type})")
+    plt.tight_layout()
+    plt.show()
+
+
+service = df["Service time"].values
+service = service[service > 0]   # keep positive values only
+
+# Descriptive statistics
+print("Service time statistics:")
+print(stats.describe(service))
+
+# Histogram
+plt.figure()
+plt.hist(service, bins=40)
+plt.xlabel("Service time (seconds)")
+plt.ylabel("Frequency")
+plt.title("Histogram of service times")
+plt.tight_layout()
+plt.show()
+
+loc, scale = stats.expon.fit(service, floc=0)
+
+plt.figure()
+stats.probplot(service, dist=stats.expon, sparams=(loc, scale), plot=plt)
+plt.title("Q-Q plot: service times vs exponential")
+plt.tight_layout()
+plt.show()
+
+# Fit gamma distribution (loc fixed at 0)
+a, loc, scale = stats.gamma.fit(service, floc=0)
+
+plt.figure()
+stats.probplot(service, dist=stats.gamma, sparams=(a, loc, scale), plot=plt)
+plt.title("Q-Q plot: service times vs gamma")
+plt.tight_layout()
+plt.show()
+
+# Fit lognormal distribution (loc fixed at 0)
+s, loc, scale = stats.lognorm.fit(service, floc=0)
+
+plt.figure()
+stats.probplot(service, dist=stats.lognorm, sparams=(s, loc, scale), plot=plt)
+plt.title("Q-Q plot: service times vs lognormal")
+plt.tight_layout()
+plt.show()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
