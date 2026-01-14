@@ -64,3 +64,4 @@ plt.ylabel("Sample interarrival quantiles")
 plt.title("Exponential Q–Q plot")
 plt.tight_layout()
 plt.show()
+
