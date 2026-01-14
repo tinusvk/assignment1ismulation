@@ -65,7 +65,7 @@ plt.tight_layout()
 plt.show()
 
 # -----------------------
-# Arrivals per day 
+# Arrivals per day
 # -----------------------
 
 days = arrivals_per_day.index.values
@@ -104,13 +104,13 @@ for visitor_type, g in df.groupby("Visitor type label"):
         .count()
         .sort_index()
     )
-    
+
     # Cumulative sum over days
     cumulative_arrivals_type = arrivals_per_day_type.cumsum()
-    
+
     days = cumulative_arrivals_type.index.values
     cum_counts = cumulative_arrivals_type.values
-    
+
     plt.plot(days, cum_counts, marker="o", label=str(visitor_type))
 
 # Axis formatting
@@ -279,18 +279,18 @@ plt.show()
 for visitor_type, g in df.groupby("Visitor type label"):
     g = g.copy()
     g["Interarrival"] = np.nan
-    
+
     for day, gg in g.groupby("Day", sort=True):
         idx = gg.index
         times = gg["Time of day in seconds"].values
         inter = np.diff(times, prepend=np.nan)
         g.loc[idx, "Interarrival"] = inter
-    
+
     ia = g["Interarrival"].dropna()
     ia = ia[ia > 0]
-    
+
     lambda_hat_type = 1 / ia.mean()
-    
+
     plt.figure()
     stats.probplot(
         ia,
@@ -298,7 +298,7 @@ for visitor_type, g in df.groupby("Visitor type label"):
         sparams=(0, 1/lambda_hat_type),
         plot=plt
     )
-    
+
     plt.title(f"Q-Q plot: interarrival times ({visitor_type})")
     plt.tight_layout()
     plt.show()
@@ -345,6 +345,86 @@ stats.probplot(service, dist=stats.lognorm, sparams=(s, loc, scale), plot=plt)
 plt.title("Q-Q plot: service times vs lognormal")
 plt.tight_layout()
 plt.show()
+
+
+# -----------------------
+# Arrival times during the day per visitor type
+# -----------------------
+
+OPEN_SEC = 9 * 3600
+CLOSE_SEC = 17 * 3600
+
+# Keep arrivals in opening hours (optional but usually desired)
+df_open = df[df["Time of day in seconds"].between(OPEN_SEC, CLOSE_SEC)].copy()
+
+# Convert to hours since midnight (clock time)
+df_open["Arrival hour"] = df_open["Time of day in seconds"] / 3600
+
+# Also convenient: hour bin as integer hour (9..17)
+df_open["Arrival hour bin"] = np.floor(df_open["Arrival hour"]).astype(int)
+
+# -----------------------
+# 1) Histogram overlay: arrival times by visitor type
+# -----------------------
+plt.figure()
+for t, g in df_open.groupby("Visitor type label"):
+    plt.hist(g["Arrival hour"], bins=30, alpha=0.5, label=str(t))
+
+hour_ticks = range(9, 18)
+plt.xticks(hour_ticks, [f"{h:02d}:00" for h in hour_ticks])
+plt.xlabel("Arrival time of day")
+plt.ylabel("Frequency")
+plt.title("Histogram: arrival times during the day by visitor type")
+plt.legend()
+plt.tight_layout()
+plt.show()
+
+# -----------------------
+# 2) Normalized histogram overlay (compare shapes)
+# -----------------------
+plt.figure()
+for t, g in df_open.groupby("Visitor type label"):
+    plt.hist(g["Arrival hour"], bins=30, density=True, alpha=0.5, label=str(t))
+
+plt.xticks(hour_ticks, [f"{h:02d}:00" for h in hour_ticks])
+plt.xlabel("Arrival time of day")
+plt.ylabel("Density")
+plt.title("Normalized histogram: arrival times by visitor type")
+plt.legend()
+plt.tight_layout()
+plt.show()
+
+# -----------------------
+# 3) Arrivals per hour (counts) by visitor type
+# -----------------------
+# Make sure all hours 9..17 are present for each type (fill missing with 0)
+all_hours = list(range(9, 18))
+
+counts_hour_type = (
+    df_open
+    .groupby(["Visitor type label", "Arrival hour bin"])["Visitor Number"]
+    .count()
+    .rename("count")
+    .reset_index()
+)
+
+plt.figure()
+for t, g in counts_hour_type.groupby("Visitor type label"):
+    # Align to all hours
+    y = pd.Series(g["count"].values, index=g["Arrival hour bin"]).reindex(all_hours, fill_value=0)
+    plt.plot(all_hours, y.values, marker="o", label=str(t))
+
+plt.xticks(all_hours, [f"{h:02d}:00" for h in all_hours])
+plt.xlabel("Hour of day")
+plt.ylabel("Number of arrivals")
+plt.title("Arrivals per hour (09:00–17:00) by visitor type")
+plt.legend()
+plt.tight_layout()
+plt.show()
+
+
+
+
 
 
 
