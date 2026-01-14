@@ -521,6 +521,58 @@ for vtype, g in df.groupby("Visitor type label"):
         bins=40
     )
 
+# ============================================================
+# 9) Q-Q plots using the SAME Gamma parameters (from screenshot)
+# ============================================================
+
+def qqplot_given_gamma(service_times, shape, loc, scale, title):
+    """
+    Q-Q plot of service_times against Gamma(shape, loc, scale)
+    using GIVEN parameters (no refitting).
+    """
+    x = np.asarray(service_times, dtype=float)
+    x = x[np.isfinite(x) & (x > 0)]
+    x.sort()
+    n = len(x)
+
+    if n < 5:
+        print(f"Skipping Q-Q plot (n={n}): {title}")
+        return
+
+    # plotting positions
+    p = (np.arange(1, n + 1) - 0.5) / n
+
+    # theoretical quantiles from the given Gamma
+    q = stats.gamma.ppf(p, a=shape, loc=loc, scale=scale)
+
+    plt.figure()
+    plt.scatter(q, x, alpha=0.7)
+    lo = min(q.min(), x.min())
+    hi = max(q.max(), x.max())
+    plt.plot([lo, hi], [lo, hi], linewidth=2)
+    plt.xlabel("Theoretical quantiles (Gamma)")
+    plt.ylabel("Empirical quantiles (Service time)")
+    plt.title(title)
+    plt.tight_layout()
+    plt.show()
+
+
+# --- Make the two QQ plots (Employee and Student) ---
+for vtype, g in df.groupby("Visitor type label"):
+    if vtype not in gamma_params_from_screenshot:
+        continue
+
+    params = gamma_params_from_screenshot[vtype]
+    service = g["Service time"].to_numpy()
+
+    qqplot_given_gamma(
+        service_times=service,
+        shape=params["shape"],
+        loc=params["loc"],
+        scale=params["scale"],
+        title=f"Q-Q plot: Service times vs Gamma (given params) — {vtype}"
+    )
+
 
 
 
