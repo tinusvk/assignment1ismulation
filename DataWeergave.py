@@ -422,8 +422,41 @@ plt.legend()
 plt.tight_layout()
 plt.show()
 
+# -----------------------
+# Cumulative arrivals vs time of day (per visitor type)
+# -----------------------
 
+# Keep arrivals within opening hours
+df_open = df[df["Time of day in seconds"].between(OPEN_SEC, CLOSE_SEC)].copy()
 
+# Convert to hours since midnight
+df_open["Arrival hour"] = df_open["Time of day in seconds"] / 3600
+
+plt.figure()
+
+for visitor_type, g in df_open.groupby("Visitor type label"):
+    # Sort by time of day
+    g = g.sort_values("Arrival hour").reset_index(drop=True)
+
+    # Cumulative arrivals (adds up correctly!)
+    g["Cumulative arrivals"] = np.arange(1, len(g) + 1)
+
+    # Plot
+    plt.plot(
+        g["Arrival hour"],
+        g["Cumulative arrivals"],
+        label=str(visitor_type)
+    )
+
+# Axis formatting
+plt.xticks(range(9, 18), [f"{h:02d}:00" for h in range(9, 18)])
+plt.xlabel("Time of day")
+plt.ylabel("Cumulative number of arrivals")
+plt.title("Cumulative arrivals during the day by visitor type")
+plt.legend()
+
+plt.tight_layout()
+plt.show()
 
 
 
