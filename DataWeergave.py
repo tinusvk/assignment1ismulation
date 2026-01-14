@@ -572,6 +572,76 @@ for vtype, g in df.groupby("Visitor type label"):
         scale=params["scale"],
         title=f"Q-Q plot: Service times vs Gamma (given params) — {vtype}"
     )
+# ============================================================
+# Overlay 2-parameter Gamma distributions (loc = 0)
+# using the ESTIMATED PARAMETERS from the screenshot
+# ============================================================
+
+gamma_2p_params = {
+    "Employee": {"shape": 4.56327, "scale": 80.1021},
+    "Student":  {"shape": 3.87712, "scale": 93.9189},
+}
+
+def plot_hist_with_gamma_2p(service_times, shape, scale, title, bins=40):
+    """
+    Histogram (density=True) of service times with OVERLAY
+    of 2-parameter Gamma(shape, scale), loc fixed at 0.
+    """
+    x = np.asarray(service_times, dtype=float)
+    x = x[np.isfinite(x) & (x > 0)]
+
+    if len(x) < 5:
+        print(f"Skipping plot (n={len(x)}): {title}")
+        return
+
+    plt.figure()
+
+    # Histogram as density
+    plt.hist(
+        x,
+        bins=bins,
+        density=True,
+        alpha=0.5,
+        label="Service time histogram (density)"
+    )
+
+    # Grid for Gamma PDF (only positive support)
+    x_grid = np.linspace(0, x.max(), 600)
+    pdf = stats.gamma.pdf(x_grid, a=shape, loc=0, scale=scale)
+
+    # Overlay Gamma PDF
+    plt.plot(
+        x_grid,
+        pdf,
+        linewidth=2,
+        label=f"Gamma PDF (shape={shape:.4g}, scale={scale:.4g})"
+    )
+
+    plt.xlabel("Service time (seconds)")
+    plt.ylabel("Density")
+    plt.title(title)
+    plt.legend()
+    plt.tight_layout()
+    plt.show()
+
+
+# ------------------------------------------------------------
+# Create plots per visitor type (2-parameter Gamma)
+# ------------------------------------------------------------
+for vtype, g in df.groupby("Visitor type label"):
+    if vtype not in gamma_2p_params:
+        continue
+
+    params = gamma_2p_params[vtype]
+    service = g["Service time"].to_numpy()
+
+    plot_hist_with_gamma_2p(
+        service_times=service,
+        shape=params["shape"],
+        scale=params["scale"],
+        title=f"Service time histogram + 2p Gamma fit — {vtype}",
+        bins=40
+    )
 
 
 
