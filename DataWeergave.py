@@ -459,6 +459,69 @@ plt.tight_layout()
 plt.show()
 
 
+# ============================================================
+# 8) Overlay the TWO fitted Gamma distributions (from screenshot)
+#    over service-time histograms per visitor type
+# ============================================================
+
+gamma_params_from_screenshot = {
+    "Employee": {"shape": 69.1838, "loc": -900.691, "scale": 18.3022},
+    "Student":  {"shape": 109.123, "loc": -1293.29, "scale": 15.1885},
+}
+
+def plot_hist_with_given_gamma(service_times, shape, loc, scale, title, bins=40):
+    """
+    Histogram (density=True) of service times with OVERLAY
+    of Gamma(shape, loc, scale) using GIVEN parameters.
+    """
+    x = np.asarray(service_times, dtype=float)
+    x = x[np.isfinite(x) & (x > 0)]
+    if len(x) < 5:
+        print(f"Skipping plot (n={len(x)}): {title}")
+        return
+
+    plt.figure()
+
+    # Histogram in density units so PDF matches scale
+    plt.hist(x, bins=bins, density=True, alpha=0.5, label="Service time histogram (density)")
+
+    # PDF grid over observed range
+    x_grid = np.linspace(x.min(), x.max(), 600)
+    pdf = stats.gamma.pdf(x_grid, a=shape, loc=loc, scale=scale)
+
+    # Overlay Gamma PDF
+    plt.plot(
+        x_grid,
+        pdf,
+        linewidth=2,
+        label=f"Gamma PDF (shape={shape:.4g}, loc={loc:.4g}, scale={scale:.4g})"
+    )
+
+    plt.xlabel("Service time (seconds)")
+    plt.ylabel("Density")
+    plt.title(title)
+    plt.legend()
+    plt.tight_layout()
+    plt.show()
+
+# --- Make the two plots (Employee and Student) ---
+for vtype, g in df.groupby("Visitor type label"):
+    if vtype not in gamma_params_from_screenshot:
+        continue
+
+    params = gamma_params_from_screenshot[vtype]
+    service = g["Service time"].to_numpy()
+
+    plot_hist_with_given_gamma(
+        service_times=service,
+        shape=params["shape"],
+        loc=params["loc"],
+        scale=params["scale"],
+        title=f"Service time histogram + fitted Gamma (given params) — {vtype}",
+        bins=40
+    )
+
+
 
 
 
